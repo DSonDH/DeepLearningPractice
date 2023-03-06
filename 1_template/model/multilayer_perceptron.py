@@ -50,7 +50,7 @@ for i in range(epoch):
                                      )
                        )
         
-        # sigmoid
+        # sigmoid output node하나니깐 for loop 없음
         output = 1 / (1 + np.exp(
                                 -(np.sum(hidden_2 * w3) + b3)
                             )
@@ -60,16 +60,16 @@ for i in range(epoch):
         result = np.append(result, output)
 
         # backpropagation
-        # activaton 미분한거 한번 더 곱해져야 할듯, w3 + 이 아니라 w3 - 이어야 할듯
         alpha3 = error[j] * output * (1 - output)
+        alpha2 = alpha3 * hidden_2 * (1 - hidden_2) * w3  # (1, 10)
+        alpha1 = alpha2 * np.matmul(hidden_1 * (1 - hidden_1), w2)
+
         w3 = w3 + (learning_rate * alpha3 * hidden_2)
         b3 = b3 + learning_rate * alpha3
 
-        alpha2 = alpha3 * hidden_2 * (1 - hidden_2) * w3  # (1, 10)
         w2 = w2 + learning_rate * alpha2.T * hidden_1  # hidden_1 (10,)
         b2 = b2 + learning_rate * alpha2
-        
-        alpha1 = alpha2 * np.matmul(hidden_1 * (1 - hidden_1), w2)
+                
         w1 = w1 + learning_rate * alpha1.T * x[j]
         b1 = b1 + learning_rate * alpha1
 
@@ -87,6 +87,6 @@ print("EPOCH : %05d MSE : %04f RESULTS : 0 0 => %04f,  0 1 => %04f,  1 0 => %04f
 # 100node EPOCH : 01999 MSE : 0.250055 RESULTS : 0 0 => 0.010722,  0 1 => 0.991978,  1 0 => 0.992148,  1 1 => 0.999989
 # 10x10node EPOCH : 01999 MSE : 0.224725 RESULTS : 0 0 => 0.306537,  0 1 => 0.622432,  1 0 => 0.501447,  1 1 => 0.643290
 # 10x10node EPOCH : 01999 MSE : 0.267745 RESULTS : 0 0 => 0.498835,  0 1 => 0.464600,  1 0 => 0.501165,  1 1 => 0.535400
-
+# 10x10node EPOCH : 01999 MSE : 0.266463 RESULTS : 0 0 => 0.499264,  0 1 => 0.466158,  1 0 => 0.502119,  1 1 => 0.532649
 
 print(mse)
