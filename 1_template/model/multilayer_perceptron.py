@@ -61,16 +61,16 @@ for i in range(epoch):
 
         # backpropagation
         alpha3 = error[j] * output * (1 - output)
-        alpha2 = alpha3 * hidden_2 * (1 - hidden_2) * w3  # (1, 10)
-        alpha1 = alpha2 * np.matmul(hidden_1 * (1 - hidden_1), w2)
+        alpha2 = alpha3 * w3 * hidden_2 * (1 - hidden_2)  # (1, 10)        
+        alpha1 = alpha2 * np.matmul(w2.T, hidden_1 * (1 - hidden_1))
 
-        w3 = w3 + (learning_rate * alpha3 * hidden_2)
+        w3 = w3 + learning_rate * alpha3 * hidden_2
         b3 = b3 + learning_rate * alpha3
 
         w2 = w2 + learning_rate * alpha2.T * hidden_1  # hidden_1 (10,)
         b2 = b2 + learning_rate * alpha2
-                
-        w1 = w1 + learning_rate * alpha1.T * x[j]
+
+        w1 = w1 + learning_rate * np.matmul(alpha1.T, np.expand_dims(x[j], 1).T)
         b1 = b1 + learning_rate * alpha1
 
     if i % 100 == 0:
@@ -88,5 +88,5 @@ print("EPOCH : %05d MSE : %04f RESULTS : 0 0 => %04f,  0 1 => %04f,  1 0 => %04f
 # 10x10node EPOCH : 01999 MSE : 0.224725 RESULTS : 0 0 => 0.306537,  0 1 => 0.622432,  1 0 => 0.501447,  1 1 => 0.643290
 # 10x10node EPOCH : 01999 MSE : 0.267745 RESULTS : 0 0 => 0.498835,  0 1 => 0.464600,  1 0 => 0.501165,  1 1 => 0.535400
 # 10x10node EPOCH : 01999 MSE : 0.266463 RESULTS : 0 0 => 0.499264,  0 1 => 0.466158,  1 0 => 0.502119,  1 1 => 0.532649
-
+# 10x10node EPOCH : 01999 MSE : 0.266288 RESULTS : 0 0 => 0.497849,  0 1 => 0.471138,  1 0 => 0.497660,  1 1 => 0.534095
 print(mse)
