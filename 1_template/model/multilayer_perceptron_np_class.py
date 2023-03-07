@@ -63,4 +63,4 @@ y = np.array([0, 1, 1, 0])
 
 # Create and train the MLP
 mlp = MLP(input_size=2, hidden_size=10, output_size=1)
-mlp.train(X, y, num_epochs=2000, learning_rate=0.5)
+mlp.train(X, y, num_epochs=2000, learning_rate=0.1)
