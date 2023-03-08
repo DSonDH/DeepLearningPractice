@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class ConvLayer:
     def __init__(self, num_filters, filter_size, stride, padding):
         self.num_filters = num_filters
@@ -10,7 +11,12 @@ class ConvLayer:
 
     def forward(self, inputs):
         self.inputs = inputs
-        padded_inputs = np.pad(inputs, [(0, 0), (self.padding, self.padding), (self.padding, self.padding), (0, 0)])
+        padded_inputs = np.pad(inputs, 
+                               [(0, 0), 
+                                (self.padding, self.padding), 
+                                (self.padding, self.padding), 
+                                (0, 0)]
+                              )
         batch_size, height, width, num_channels = padded_inputs.shape
         output_height = (height - self.filter_size) // self.stride + 1
         output_width = (width - self.filter_size) // self.stride + 1
@@ -20,29 +26,64 @@ class ConvLayer:
             for i in range(output_height):
                 for j in range(output_width):
                     for f in range(self.num_filters):
-                        receptive_field = padded_inputs[b, i*self.stride:i*self.stride+self.filter_size, j*self.stride:j*self.stride+self.filter_size, :]
+                        receptive_field = padded_inputs[
+                                                        b, 
+                                                        i * self.stride : i * self.stride + self.filter_size, 
+                                                        j * self.stride : j * self.stride + self.filter_size, 
+                                                        :
+                                                       ]
+                                                        
                         self.outputs[b, i, j, f] = np.sum(receptive_field * self.filters[f, ...])
         return self.outputs
 
-    def backward(self, grad_output, learning_rate):
-        batch_size, height, width, num_channels = self.inputs.shape
-        grad_inputs = np.zeros(self.inputs.shape)
-        grad_filters = np.zeros(self.filters.shape)
+    def backward(self, grad_input, learning_rate):
+        batch_size, _, _, _ = self.inputs.shape
+        grad_output = np.zeros(self.inputs.shape)  # 다음 레이어에 gradient 전달하기 위한 변수
+        grad_filters = np.zeros(self.filters.shape)  # 현재 레이어 weight 업데이트용 변수
 
-        padded_inputs = np.pad(self.inputs, [(0, 0), (self.padding, self.padding), (self.padding, self.padding), (0, 0)])
-        padded_grad_inputs = np.pad(grad_inputs, [(0, 0), (self.padding, self.padding), (self.padding, self.padding), (0, 0)])
+        padded_inputs = np.pad(self.inputs,  # 100, 28, 28, 1
+                               [(0, 0), 
+                                (self.padding, self.padding), 
+                                (self.padding, self.padding), 
+                                (0, 0)]  # pad_width : {sequence, array_like, int} 
+                                         # Number of values padded to the edges of each axis.
+                              )
+        padded_grad_inputs = np.pad(self.inputs, 
+                                    [(0, 0), 
+                                     (self.padding, self.padding), 
+                                     (self.padding, self.padding), 
+                                     (0, 0)]
+                                   )
 
         for b in range(batch_size):
             for i in range(self.outputs.shape[1]):
                 for j in range(self.outputs.shape[2]):
                     for f in range(self.num_filters):
-                        receptive_field = padded_inputs[b, i*self.stride:i*self.stride+self.filter_size, j*self.stride:j*self.stride+self.filter_size, :]
-                        grad_filters[f, ...] += receptive_field * grad_output[b, i, j, f]
-                        padded_grad_inputs[b, i*self.stride:i*self.stride+self.filter_size, j*self.stride:j*self.stride+self.filter_size, :] += self.filters[f, ...] * grad_output[b, i, j, f]
-
-        grad_inputs = padded_grad_inputs[:, self.padding:-self.padding, self.padding:-self.padding, :]
-        self.grad_filters = grad_filters
-        return grad_inputs
+                        receptive_field = padded_inputs[  # 100, 28, 28, 1
+                                                        b, 
+                                                        j * self.stride : j * self.stride + self.filter_size, 
+                                                        i * self.stride : i * self.stride + self.filter_size, 
+                                                        :
+                                                       ]
+                        
+                        grad_filters[f, ...] += (receptive_field * grad_input[b, i, j, f]).squeeze()  # 100, 26, 26, 8
+                        padded_grad_inputs[
+                                           b, 
+                                           i * self.stride : i * self.stride + self.filter_size, 
+                                           j * self.stride : j * self.stride + self.filter_size, 
+                                           :
+                                          ] += self.filters[f, ...] * grad_input[b, i, j, f]
+        
+        grad_output = padded_grad_inputs[
+                                         :,
+                                         self.padding : -self.padding,  # remove padding
+                                         self.padding : -self.padding,
+                                         :
+                                        ]
+        self.grad_filters = grad_filters  # 얘로 weight 업데이트 하는 코드 추가해야함.
+        #TODO: weight update using learning rate 구현하고 학습 잘되는지 확인.
+        
+        return grad_output
 
 
 class ReLU:
@@ -50,7 +91,7 @@ class ReLU:
         self.input = input
         return np.maximum(0, input)
 
-    def backward(self, output_grad):
+    def backward(self, output_grad, _):
         return output_grad * (self.input > 0)
 
 
@@ -69,30 +110,50 @@ class MaxPoolLayer:
         for b in range(batch_size):
             for i in range(output_height):
                 for j in range(output_width):
-                    receptive_field = inputs[b, i*self.stride:i*self.stride+self.pool_size, j*self.stride:j*self.stride+self.pool_size, :]
+                    receptive_field = inputs[
+                                               b, 
+                                               i * self.stride : i * self.stride + self.pool_size, 
+                                               j * self.stride : j * self.stride + self.pool_size, 
+                                               :
+                                            ]
+                                               
                     self.outputs[b, i, j, :] = np.amax(receptive_field, axis=(0, 1))
         return self.outputs
     
-    def backward(self, grad_output, learning_rate):
-        grad_inputs = np.zeros(self.inputs.shape)
+    def backward(self, grad_input, _):
+        grad_output = np.zeros(self.inputs.shape)
         batch_size, height, width, num_channels = self.inputs.shape
 
         for b in range(batch_size):
-            for i in range(grad_output.shape[1]):
-                for j in range(grad_output.shape[2]):
-                    receptive_field = self.inputs[b, i*self.stride:i*self.stride+self.pool_size, j*self.stride:j*self.stride+self.pool_size, :]
+            for i in range(grad_input.shape[1]):
+                for j in range(grad_input.shape[2]):
+                    receptive_field = self.inputs[
+                                                    b, 
+                                                    i * self.stride : i * self.stride + self.pool_size, 
+                                                    j * self.stride : j * self.stride + self.pool_size, 
+                                                    :
+                                                 ]
                     mask = (receptive_field == np.amax(receptive_field, axis=(0, 1)))
-                    grad_inputs[b, i*self.stride:i*self.stride+self.pool_size, j*self.stride:j*self.stride+self.pool_size, :] += mask * grad_output[b, i, j, :]
-        return grad_inputs
+                    grad_output[
+                                  b, 
+                                  i * self.stride : i * self.stride+self.pool_size, 
+                                  j * self.stride : j * self.stride+self.pool_size, 
+                                  :
+                               ] += mask * grad_input[b, i, j, :]
+        return grad_output
 
         
 class FlattenLayer:
+    def __init__(self) -> None:
+        self.input_shape = None
+
     def forward(self, input):
         self.input_shape = input.shape
         return input.reshape((self.input_shape[0], -1))
     
-    def backward(self, grad_output, learning_rate):
-        return np.reshape(grad_output, self.inputs_shape)
+    def backward(self, grad_output, _):
+        return np.reshape(grad_output, self.input_shape)
+
 
 class DenseLayer:
     def __init__(self, num_neurons):
@@ -106,31 +167,42 @@ class DenseLayer:
         self.output = np.dot(input, self.weights) + self.bias
         return self.output
 
-    def backward(self, d_output, learning_rate):
-        d_input = np.dot(d_output, self.weights.T)
-        d_weights = np.dot(self.input.T, d_output)
-        d_bias = np.sum(d_output, axis=0, keepdims=True)
-        self.weights -= learning_rate * d_weights / self.input.shape[0]
-        self.bias -= learning_rate * d_bias / self.input.shape[0]
+    def backward(self, grad_output, learning_rate):
+        d_input = np.dot(grad_output, self.weights.T)
+
+        grad_weights = np.dot(self.input.T, grad_output)
+        grad_bias = np.sum(grad_output, axis=0, keepdims=True)
+        self.weights -= learning_rate * grad_weights / self.input.shape[0]
+        self.bias -= learning_rate * grad_bias / self.input.shape[0]
+        
         return d_input
 
 class SoftmaxLayer:
+    def __init__(self):
+        self.probs = None
+
     def forward(self, inputs):
         exp_inputs = np.exp(inputs)
         self.probs = exp_inputs / np.sum(exp_inputs, axis=1, keepdims=True)
         return self.probs
 
     def backward(self, grad_output, learning_rate):
-        num_samples = grad_output.shape[0]
-        jacobian_matrix = np.zeros((num_samples, num_samples))
-        for i in range(num_samples):
-            for j in range(num_samples):
+        """
+        개념설명 : 
+        https://ratsgo.github.io/deep%20learning/2017/10/02/softmax/
+        """
+        num_class = grad_output.shape[1]
+
+        jacobian_matrix = np.zeros((num_class, num_class))
+        # jacobian : 모든 행렬 원소들이 1차 미분 계수로 구성된 행렬
+        for i in range(num_class):
+            for j in range(num_class):
                 if i == j:
-                    jacobian_matrix[i, j] = self.probs[i] * (1.0 - self.probs[i])
+                    jacobian_matrix[i, j] = self.probs[i, j] * (1.0 - self.probs[i, j])
                 else:
-                    jacobian_matrix[i, j] = -self.probs[i] * self.probs[j]
-        grad_input = np.dot(grad_output, jacobian_matrix)
-        return grad_input
+                    jacobian_matrix[i, j] = -self.probs[i, j] * self.probs[i, j]
+        grad_output = np.dot(grad_output, jacobian_matrix)
+        return grad_output
 
 
 class CNN:
@@ -148,11 +220,14 @@ class CNN:
             for layer in self.layers:
                 input = layer.forward(input)
 
-            loss += np.sum((input - y[i])**2)
-            d_output = 2 * (input - y[i])
+            # MSE
+            loss += np.sum((input - y[i]) ** 2)
+
+            # backpropagation
+            grad_output = 2 * (input - y[i])  # derivative of MSE
             for layer in reversed(self.layers):
-                d_output = layer.backward(d_output, learning_rate)
-            print("Epoch %d loss: %.4f" % (epoch+1, loss/X.shape[0]))
+                grad_output = layer.backward(grad_output, learning_rate)
+            print("Epoch %d loss: %.4f" % (epoch+1, loss / X.shape[0]))
 
     def predict(self, X):
         predictions = []
@@ -164,6 +239,8 @@ class CNN:
                 predictions.append(prediction)
                 return np.array(predictions)
 
+
+
 if __name__ == "__main__":
     # generate random training data
     X_train = np.random.randn(100, 28, 28, 1)
@@ -174,6 +251,7 @@ if __name__ == "__main__":
 
     # create the CNN model
     cnn = CNN()
+    #FIXME: ConvLayer 여러개 쌓아서 학습 잘 되는지 확인
     cnn.add(ConvLayer(8, 3, 1, 0))
     cnn.add(ReLU())
     cnn.add(MaxPoolLayer(2, 2))
