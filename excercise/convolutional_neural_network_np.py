@@ -72,16 +72,15 @@ class ConvLayer:
                                            i * self.stride : i * self.stride + self.filter_size, 
                                            j * self.stride : j * self.stride + self.filter_size, 
                                            :
-                                          ] += self.filters[f, ...] * grad_input[b, i, j, f]
-        
+                                          ] += np.expand_dims(self.filters[f, ...] * grad_input[b, i, j, f], axis=2)
+
+        self.filters -= learning_rate * grad_filters  # weight update.
         grad_output = padded_grad_inputs[
                                          :,
-                                         self.padding : -self.padding,  # remove padding
-                                         self.padding : -self.padding,
+                                         self.padding : -self.padding if self.padding != 0 else None, # remove padding
+                                         self.padding : -self.padding if self.padding != 0 else None, # remove padding
                                          :
                                         ]
-        self.grad_filters = grad_filters  # 얘로 weight 업데이트 하는 코드 추가해야함.
-        #TODO: weight update using learning rate 구현하고 학습 잘되는지 확인.
         
         return grad_output
 
@@ -251,8 +250,9 @@ if __name__ == "__main__":
 
     # create the CNN model
     cnn = CNN()
+    
     #FIXME: ConvLayer 여러개 쌓아서 학습 잘 되는지 확인
-    cnn.add(ConvLayer(8, 3, 1, 0))
+    cnn.add(ConvLayer(8, 3, 1, 0))  # num_filters, filter_size, stride, padding
     cnn.add(ReLU())
     cnn.add(MaxPoolLayer(2, 2))
     cnn.add(FlattenLayer())
