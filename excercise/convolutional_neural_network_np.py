@@ -1,4 +1,6 @@
 import numpy as np
+import torchvision
+import torchvision.transforms as transforms
 
 
 class ConvLayer:
@@ -17,6 +19,9 @@ class ConvLayer:
                                 (self.padding, self.padding), 
                                 (0, 0)]
                               )
+        # FIXME: 
+        # ValueError: operands could not be broadcast together with remapped shapes [original->remapped]: (4,2) and requested shape (3,2)
+
         batch_size, height, width, num_channels = padded_inputs.shape
         output_height = (height - self.filter_size) // self.stride + 1
         output_width = (width - self.filter_size) // self.stride + 1
@@ -220,10 +225,10 @@ class CNN:
                 input = layer.forward(input)
 
             # MSE
-            loss += np.sum((input - y[i]) ** 2)
+            loss += np.sum((input - y) ** 2)
 
             # backpropagation
-            grad_output = 2 * (input - y[i])  # derivative of MSE
+            grad_output = 2 * (input - y)  # derivative of MSE
             for layer in reversed(self.layers):
                 grad_output = layer.backward(grad_output, learning_rate)
             print("Epoch %d loss: %.4f" % (epoch+1, loss / X.shape[0]))
@@ -242,11 +247,35 @@ class CNN:
 
 if __name__ == "__main__":
     # generate random training data
-    X_train = np.random.randn(100, 28, 28, 1)
-    y_train = np.zeros((100, 10))
-    for i in range(100):
-        label = np.random.randint(10)
-        y_train[i, label] = 1
+    # X_train = np.random.randn(100, 28, 28, 1)
+    # y_train = np.zeros((100, 10))
+    # for i in range(100):
+    #     label = np.random.randint(10)
+    #     y_train[i, label] = 1
+
+    small_dataset_size = 100
+
+    mnist_train = torchvision.datasets.MNIST(root='MNIST_data/',
+                                             train=True,
+                                             download=True)
+
+    mnist_test = torchvision.datasets.MNIST(root='MNIST_data/',
+                                            train=False,
+                                            download=True)
+    X_train = np.expand_dims(mnist_train.train_data.numpy(), axis=3)[:small_dataset_size, ...]
+    y_train_tmp = mnist_train.train_labels.numpy()[:small_dataset_size, ...]
+    X_test = np.expand_dims(mnist_test.test_data.numpy(), axis=3)[:small_dataset_size, ...]
+    y_test_tmp = mnist_test.test_labels.numpy()[:small_dataset_size, ...]
+
+    X_train = X_train / 255
+    X_test = X_test / 255
+
+    y_train = np.zeros((small_dataset_size, 10))
+    y_test = np.zeros((small_dataset_size, 10))
+    for i in range(small_dataset_size):
+        y_train[i, y_train_tmp[i]] = 1
+        y_test[i, y_test_tmp[i]] = 1
+
 
     # create the CNN model
     cnn = CNN()
