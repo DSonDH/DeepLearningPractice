@@ -1,6 +1,5 @@
 import numpy as np
 import torchvision
-import torchvision.transforms as transforms
 
 
 class ConvLayer:
@@ -19,8 +18,6 @@ class ConvLayer:
                                 (self.padding, self.padding), 
                                 (0, 0)]
                               )
-        # FIXME: 
-        # ValueError: operands could not be broadcast together with remapped shapes [original->remapped]: (4,2) and requested shape (3,2)
 
         batch_size, height, width, num_channels = padded_inputs.shape
         output_height = (height - self.filter_size) // self.stride + 1
@@ -91,6 +88,9 @@ class ConvLayer:
 
 
 class ReLU:
+    def __init__(self):
+        ...
+
     def forward(self, input):
         self.input = input
         return np.maximum(0, input)
@@ -120,7 +120,6 @@ class MaxPoolLayer:
                                                j * self.stride : j * self.stride + self.pool_size, 
                                                :
                                             ]
-                                               
                     self.outputs[b, i, j, :] = np.amax(receptive_field, axis=(0, 1))
         return self.outputs
     
@@ -148,7 +147,7 @@ class MaxPoolLayer:
 
         
 class FlattenLayer:
-    def __init__(self) -> None:
+    def __init__(self):
         self.input_shape = None
 
     def forward(self, input):
@@ -180,6 +179,7 @@ class DenseLayer:
         self.bias -= learning_rate * grad_bias / self.input.shape[0]
         
         return d_input
+
 
 class SoftmaxLayer:
     def __init__(self):
@@ -231,17 +231,17 @@ class CNN:
             grad_output = 2 * (input - y)  # derivative of MSE
             for layer in reversed(self.layers):
                 grad_output = layer.backward(grad_output, learning_rate)
-            print("Epoch %d loss: %.4f" % (epoch+1, loss / X.shape[0]))
+            print("Epoch %d loss: %.4f" % (epoch + 1, loss / X.shape[0]))
 
     def predict(self, X):
         predictions = []
         for i in range(X.shape[0]):
-            input = X[i]
+            input = np.expand_dims(X[i], axis=0)
             for layer in self.layers:
                 input = layer.forward(input)
-                prediction = np.argmax(input)
-                predictions.append(prediction)
-                return np.array(predictions)
+            prediction = np.argmax(input)
+            predictions.append(prediction)
+        return np.array(predictions)
 
 
 
@@ -252,8 +252,12 @@ if __name__ == "__main__":
     # for i in range(100):
     #     label = np.random.randint(10)
     #     y_train[i, label] = 1
+    # generate random test data
+    # X_test = np.random.randn(10, 28, 28, 1)
 
     small_dataset_size = 100
+    epochs = 10
+    lr = 0.1
 
     mnist_train = torchvision.datasets.MNIST(root='MNIST_data/',
                                              train=True,
@@ -276,11 +280,8 @@ if __name__ == "__main__":
         y_train[i, y_train_tmp[i]] = 1
         y_test[i, y_test_tmp[i]] = 1
 
-
-    # create the CNN model
-    cnn = CNN()
-    
-    #FIXME: ConvLayer 여러개 쌓아서 학습 잘 되는지 확인
+    cnn = CNN()    
+    #TODO: ConvLayer 여러개 쌓아서 학습 잘 되는지 확인
     cnn.add(ConvLayer(8, 3, 1, 0))  # num_filters, filter_size, stride, padding
     cnn.add(ReLU())
     cnn.add(MaxPoolLayer(2, 2))
@@ -288,13 +289,10 @@ if __name__ == "__main__":
     cnn.add(DenseLayer(10))
     cnn.add(SoftmaxLayer())
 
-    # train the model
-    cnn.train(X_train, y_train, num_epochs=10, learning_rate=0.1)
 
-    # generate random test data
-    X_test = np.random.randn(10, 28, 28, 1)
+    cnn.train(X_train, y_train, num_epochs=epochs, learning_rate=lr)
 
-    # predict the test data
     predictions = cnn.predict(X_test)
 
+    print("y_test:", y_test_tmp)
     print("Predictions:", predictions)
