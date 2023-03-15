@@ -226,6 +226,7 @@ class CNN:
 
             # MSE
             loss += np.sum((input - y) ** 2)
+            #!!! one hot vector로 처리하는게 맞음
 
             # backpropagation
             grad_output = 2 * (input - y)  # derivative of MSE
@@ -255,9 +256,9 @@ if __name__ == "__main__":
     # generate random test data
     # X_test = np.random.randn(10, 28, 28, 1)
 
-    small_dataset_size = 100
+    small_dataset_size = 20 * 20
     epochs = 10
-    lr = 0.1
+    lr = 0.01
 
     mnist_train = torchvision.datasets.MNIST(root='MNIST_data/',
                                              train=True,
@@ -281,7 +282,7 @@ if __name__ == "__main__":
         y_test[i, y_test_tmp[i]] = 1
 
     cnn = CNN()    
-    #TODO: ConvLayer 여러개 쌓아서 학습 잘 되는지 확인
+    #TODO: ConvLayer 여러개 쌓아서 학습 잘 되는지 확인, pytorch code 성능과 비교
     cnn.add(ConvLayer(8, 3, 1, 0))  # num_filters, filter_size, stride, padding
     cnn.add(ReLU())
     cnn.add(MaxPoolLayer(2, 2))
