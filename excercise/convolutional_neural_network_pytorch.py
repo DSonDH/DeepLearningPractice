@@ -18,6 +18,7 @@ class CNN(nn.Module):
 
     def forward(self, x):
         x = self.conv1(x)
+        # print(x.max()) # note: max value of output is very slowly increases.
         x = F.relu(x)
         x = F.max_pool2d(x, 2)
         # dropout
@@ -39,10 +40,10 @@ class CNN(nn.Module):
 if __name__ == "__main__":
 
     # hyperparameters
-    bs = 20
+    bs = 1 
     epoch_num = 10
     lr = 0.01
-    count_threshold = 20
+    count_threshold = 20000
 
 
     # load dataset
@@ -84,6 +85,7 @@ if __name__ == "__main__":
         for data, target in train_loader:
             if count > count_threshold:
                 break
+            count += 1
 
             data = data.to(device)
             target = target.to(device)
@@ -107,6 +109,8 @@ if __name__ == "__main__":
     for data, target in test_loader:
         if count > count_threshold:
             break
+        count += 1
+
         data = data.to(device)
         target = target.to(device)
         output = model(data)
@@ -114,4 +118,4 @@ if __name__ == "__main__":
         pred = output.data.max(1)[1]
 
         correct += pred.eq(target.data).sum()
-    print(f"test set accuracy {correct.cpu().numpy() / len(test_loader.dataset):.2f}%")
+    print(f"test set accuracy {correct.cpu().numpy() / len(test_loader.dataset):.2f}")

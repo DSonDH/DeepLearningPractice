@@ -1,6 +1,52 @@
 import numpy as np
 import torchvision
 
+'''  Memo
+np.matmul(self.filters[f, ...], receptive_field) == self.filters[f, ...] @ receptive_field
+
+matmul : matrix multiplication
+dot : inner product
+* : Hadamard product
+
+np.array([[1, 3], [2, 4]])  # row vector
+== [[1, 3]
+    [2, 4]]
+
+    
+# https://jimmy-ai.tistory.com/104
+# np.dot(a, b) : element-wise multiplication and sum
+# !!! but 2D * 2D : normal matrix multiplicaiton. not element-wise
+
+왼쪽 array의 last axis, 오른쪽 array의 second last axis 끼리 곱한다고 되어있지만,
+쉽게 설명하면 왼쪽 array의 각 행, 오른쪽 array의 각 열끼리
+순서대로 내적을 수행한 결과를 반환
+
+a = np.array([[1, 3], [2, 4]])
+b = np.array([[[1, 0], [0, 1]], [[0, 0], [0, 0]]])
+np.dot(a, b)
+(2 x 2) x (2, 2, 2) => (2, 2, 2)
+
+c = np.array([[[1, 0, 0], [0, 1, 0]], [[-1, 0, 0], [0, -1, 0]], [[0, 0, 0], [0, 0, 0]]])
+np.dot(a, c)
+(2 x 2) x (3, 2, 3) => (2, 3, 3)
+
+
+# np.matmul과 np.dot이 같은 결과를 나타내는 경우
+1. 1D * 1D (inner product)
+2. 2D * 2D (2D matrix multiplication)
+3. 2D * 1D  or  1D * 2D (matrix * vector)
+
+
+<<< Model Structure >>>
+ConvLayer
+ReLU
+MaxPoolLayer
+FlattenLayer
+DenseLayer
+Softmax
+
+'''
+
 
 class ConvLayer:
     def __init__(self, num_filters, filter_size, stride, padding):
@@ -9,7 +55,7 @@ class ConvLayer:
         self.stride = stride
         self.padding = padding
         self.filters = np.random.randn(num_filters, filter_size, filter_size) / filter_size ** 2
-
+        
     def forward(self, inputs):
         self.inputs = inputs
         padded_inputs = np.pad(inputs, 
@@ -19,7 +65,7 @@ class ConvLayer:
                                 (0, 0)]
                               )
 
-        batch_size, height, width, num_channels = padded_inputs.shape
+        batch_size, height, width, _ = padded_inputs.shape
         output_height = (height - self.filter_size) // self.stride + 1
         output_width = (width - self.filter_size) // self.stride + 1
         self.outputs = np.zeros((batch_size, output_height, output_width, self.num_filters))
@@ -34,8 +80,11 @@ class ConvLayer:
                                                         j * self.stride : j * self.stride + self.filter_size, 
                                                         :
                                                        ]
-                                                        
-                        self.outputs[b, i, j, f] = np.sum(receptive_field * self.filters[f, ...])
+                        self.outputs[b, i, j, f] = (self.filters[f, ...] * receptive_field.squeeze()).sum()
+                        
+                        if (self.filters[f, ...] * receptive_field.squeeze()).sum() > 0.1:
+                            print(f'conv output : {(self.filters[f, ...] * receptive_field.squeeze()).sum()}')
+                            #FIXME: pytorch는 conv2d output max가 커져봤자 4~5이지 100이상 되지 않았음.
         return self.outputs
 
     def backward(self, grad_input, learning_rate):
@@ -57,10 +106,10 @@ class ConvLayer:
                                      (0, 0)]
                                    )
 
-        for b in range(batch_size):
-            for i in range(self.outputs.shape[1]):
-                for j in range(self.outputs.shape[2]):
-                    for f in range(self.num_filters):
+        for b in range(batch_size):  # b
+            for i in range(self.outputs.shape[1]):  # h
+                for j in range(self.outputs.shape[2]):  # w
+                    for f in range(self.num_filters):  # c
                         receptive_field = padded_inputs[  # 100, 28, 28, 1
                                                         b, 
                                                         j * self.stride : j * self.stride + self.filter_size, 
@@ -75,7 +124,7 @@ class ConvLayer:
                                            j * self.stride : j * self.stride + self.filter_size, 
                                            :
                                           ] += np.expand_dims(self.filters[f, ...] * grad_input[b, i, j, f], axis=2)
-
+        
         self.filters -= learning_rate * grad_filters  # weight update.
         grad_output = padded_grad_inputs[
                                          :,
@@ -171,14 +220,10 @@ class DenseLayer:
         return self.output
 
     def backward(self, grad_output, learning_rate):
-        d_input = np.dot(grad_output, self.weights.T)
-
-        grad_weights = np.dot(self.input.T, grad_output)
-        grad_bias = np.sum(grad_output, axis=0, keepdims=True)
-        self.weights -= learning_rate * grad_weights / self.input.shape[0]
-        self.bias -= learning_rate * grad_bias / self.input.shape[0]
+        self.weights -= learning_rate * np.dot(self.input.T, grad_output)
+        self.bias -= learning_rate * np.sum(grad_output, axis=0, keepdims=True)
         
-        return d_input
+        return np.dot(grad_output, self.weights.T)
 
 
 class SoftmaxLayer:
@@ -188,9 +233,10 @@ class SoftmaxLayer:
     def forward(self, inputs):
         exp_inputs = np.exp(inputs)
         self.probs = exp_inputs / np.sum(exp_inputs, axis=1, keepdims=True)
+        #FIXME: overflow !!!
         return self.probs
 
-    def backward(self, grad_output, learning_rate):
+    def backward(self, grad_output, _):
         """
         개념설명 : 
         https://ratsgo.github.io/deep%20learning/2017/10/02/softmax/
@@ -202,9 +248,9 @@ class SoftmaxLayer:
         for i in range(num_class):
             for j in range(num_class):
                 if i == j:
-                    jacobian_matrix[i, j] = self.probs[i, j] * (1.0 - self.probs[i, j])
+                    jacobian_matrix[i, j] = self.probs[0, j] * (1.0 - self.probs[0, j])
                 else:
-                    jacobian_matrix[i, j] = -self.probs[i, j] * self.probs[i, j]
+                    jacobian_matrix[i, j] = -self.probs[0, j] ** 2
         grad_output = np.dot(grad_output, jacobian_matrix)
         return grad_output
 
@@ -216,22 +262,29 @@ class CNN:
     def add(self, layer):
         self.layers.append(layer)
 
-    def train(self, X, y, num_epochs, learning_rate):
+    def train(self, X, y, num_epochs, learning_rate, batch_size):
         for epoch in range(num_epochs):
             loss = 0
-            
-            input = X
-            for layer in self.layers:
-                input = layer.forward(input)
 
-            # MSE
-            loss += np.sum((input - y) ** 2)
-            #!!! one hot vector로 처리하는게 맞음
+            for i in range(len(X) // batch_size):
+                input = np.expand_dims(X[i], axis=0)
+                
+                target = y[i]
 
-            # backpropagation
-            grad_output = 2 * (input - y)  # derivative of MSE
-            for layer in reversed(self.layers):
-                grad_output = layer.backward(grad_output, learning_rate)
+                for layer in self.layers:
+                    if i == 3 or input.max() > 1000:
+                        1
+                    input = layer.forward(input)  # input 이지만 output임 (...)
+
+                # MSE
+                loss += np.sum((input - target) ** 2) / input.shape[0]
+
+                # backpropagation
+                grad_output = 2 * (input - target)  # derivative of MSE
+
+                for layer in reversed(self.layers):
+                    grad_output = layer.backward(grad_output, learning_rate)
+
             print("Epoch %d loss: %.4f" % (epoch + 1, loss / X.shape[0]))
 
     def predict(self, X):
@@ -247,16 +300,14 @@ class CNN:
 
 
 if __name__ == "__main__":
-    # generate random training data
-    # X_train = np.random.randn(100, 28, 28, 1)
-    # y_train = np.zeros((100, 10))
-    # for i in range(100):
-    #     label = np.random.randint(10)
-    #     y_train[i, label] = 1
-    # generate random test data
-    # X_test = np.random.randn(10, 28, 28, 1)
 
-    small_dataset_size = 20 * 20
+    bs = 1  # batch size
+    n_iter = 2000
+    small_dataset_size = bs * n_iter  
+    # bs1로 200개 샘플 학습 : loss는 줄어드나 test acc는 10%
+    # bs1로 2000개 샘플 학습 : loss는 줄어드나 test acc는 17%
+    # bs1로 20000개 샘플 학습 : loss는 줄어들다 조금 오르다 test acc는 93%
+
     epochs = 10
     lr = 0.01
 
@@ -267,8 +318,10 @@ if __name__ == "__main__":
     mnist_test = torchvision.datasets.MNIST(root='MNIST_data/',
                                             train=False,
                                             download=True)
+    
     X_train = np.expand_dims(mnist_train.train_data.numpy(), axis=3)[:small_dataset_size, ...]
     y_train_tmp = mnist_train.train_labels.numpy()[:small_dataset_size, ...]
+
     X_test = np.expand_dims(mnist_test.test_data.numpy(), axis=3)[:small_dataset_size, ...]
     y_test_tmp = mnist_test.test_labels.numpy()[:small_dataset_size, ...]
 
@@ -290,10 +343,7 @@ if __name__ == "__main__":
     cnn.add(DenseLayer(10))
     cnn.add(SoftmaxLayer())
 
-
-    cnn.train(X_train, y_train, num_epochs=epochs, learning_rate=lr)
+    cnn.train(X_train, y_train, num_epochs=epochs, learning_rate=lr, batch_size=bs)
 
     predictions = cnn.predict(X_test)
-
-    print("y_test:", y_test_tmp)
-    print("Predictions:", predictions)
+    print(f"test set accuracy {100 * sum(y_test_tmp == predictions) / len(predictions):.2f}%")
