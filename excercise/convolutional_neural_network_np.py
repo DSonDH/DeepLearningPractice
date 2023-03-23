@@ -1,7 +1,7 @@
 import numpy as np
 import torchvision
 
-'''  Memo
+""" Memo
 np.matmul(self.filters[f, ...], receptive_field) == self.filters[f, ...] @ receptive_field
 
 matmul : matrix multiplication
@@ -30,7 +30,6 @@ c = np.array([[[1, 0, 0], [0, 1, 0]], [[-1, 0, 0], [0, -1, 0]], [[0, 0, 0], [0, 
 np.dot(a, c)
 (2 x 2) x (3, 2, 3) => (2, 3, 3)
 
-
 # np.matmul과 np.dot이 같은 결과를 나타내는 경우
 1. 1D * 1D (inner product)
 2. 2D * 2D (2D matrix multiplication)
@@ -44,9 +43,7 @@ MaxPoolLayer
 FlattenLayer
 DenseLayer
 Softmax
-
-'''
-
+"""
 
 class ConvLayer:
     def __init__(self, num_filters, filter_size, stride, padding):
@@ -54,8 +51,7 @@ class ConvLayer:
         self.filter_size = filter_size
         self.stride = stride
         self.padding = padding
-        self.filters = np.random.randn(num_filters, filter_size, filter_size) / filter_size ** 2
-        
+                
     def forward(self, inputs):
         self.inputs = inputs
         padded_inputs = np.pad(inputs, 
@@ -70,6 +66,18 @@ class ConvLayer:
         output_width = (width - self.filter_size) // self.stride + 1
         self.outputs = np.zeros((batch_size, output_height, output_width, self.num_filters))
 
+        # Xavier weight initialization: https://yeomko.tistory.com/40 
+        fan_in = self.filter_size ** 2 * self.inputs.shape[-1]
+        fan_out = self.filter_size ** 2 * self.num_filters
+        sigma = np.sqrt(2.0 / (fan_in + fan_out))
+        self.filters = np.random.normal(loc=0.0, 
+                                        scale=sigma, 
+                                        size=(self.num_filters, 
+                                              self.filter_size, 
+                                              self.filter_size
+                                             )
+                                       )
+
         for b in range(batch_size):
             for i in range(output_height):
                 for j in range(output_width):
@@ -80,13 +88,13 @@ class ConvLayer:
                                                         j * self.stride : j * self.stride + self.filter_size, 
                                                         :
                                                        ]
-                        self.outputs[b, i, j, f] = (self.filters[f, ...] * receptive_field.squeeze()).sum()
-                        
-                        if (self.filters[f, ...] * receptive_field.squeeze()).sum() > 0.1:
-                            print(f'conv output : {(self.filters[f, ...] * receptive_field.squeeze()).sum()}')
-                            #FIXME: pytorch는 conv2d output max가 커져봤자 4~5이지 100이상 되지 않았음.
+                        val = (self.filters[f, ...] * receptive_field.squeeze()).sum()
+                        self.outputs[b, i, j, f] = val
+                        # if abs(val) > 1:
+                        #     print(f'conv output : {val}')
         return self.outputs
-
+    
+    
     def backward(self, grad_input, learning_rate):
         batch_size, _, _, _ = self.inputs.shape
         grad_output = np.zeros(self.inputs.shape)  # 다음 레이어에 gradient 전달하기 위한 변수
@@ -125,14 +133,14 @@ class ConvLayer:
                                            :
                                           ] += np.expand_dims(self.filters[f, ...] * grad_input[b, i, j, f], axis=2)
         
-        self.filters -= learning_rate * grad_filters  # weight update.
+        self.filters += -learning_rate * grad_filters  # weight update.
         grad_output = padded_grad_inputs[
                                          :,
                                          self.padding : -self.padding if self.padding != 0 else None, # remove padding
                                          self.padding : -self.padding if self.padding != 0 else None, # remove padding
                                          :
                                         ]
-        
+
         return grad_output
 
 
@@ -174,7 +182,7 @@ class MaxPoolLayer:
     
     def backward(self, grad_input, _):
         grad_output = np.zeros(self.inputs.shape)
-        batch_size, height, width, num_channels = self.inputs.shape
+        batch_size, _, _, _ = self.inputs.shape
 
         for b in range(batch_size):
             for i in range(grad_input.shape[1]):
@@ -233,7 +241,6 @@ class SoftmaxLayer:
     def forward(self, inputs):
         exp_inputs = np.exp(inputs)
         self.probs = exp_inputs / np.sum(exp_inputs, axis=1, keepdims=True)
-        #FIXME: overflow !!!
         return self.probs
 
     def backward(self, grad_output, _):
@@ -242,16 +249,12 @@ class SoftmaxLayer:
         https://ratsgo.github.io/deep%20learning/2017/10/02/softmax/
         """
         num_class = grad_output.shape[1]
-
-        jacobian_matrix = np.zeros((num_class, num_class))
-        # jacobian : 모든 행렬 원소들이 1차 미분 계수로 구성된 행렬
+        jacobian_matrix = np.matmul(self.probs.T, self.probs)
         for i in range(num_class):
-            for j in range(num_class):
-                if i == j:
-                    jacobian_matrix[i, j] = self.probs[0, j] * (1.0 - self.probs[0, j])
-                else:
-                    jacobian_matrix[i, j] = -self.probs[0, j] ** 2
+            jacobian_matrix[i, i] += self.probs[0, i]
+        
         grad_output = np.dot(grad_output, jacobian_matrix)
+
         return grad_output
 
 
@@ -261,6 +264,14 @@ class CNN:
         
     def add(self, layer):
         self.layers.append(layer)
+        # <<< Model Structure >>>
+        # ConvLayer
+        # ReLU
+        # MaxPoolLayer
+        # FlattenLayer
+        # DenseLayer
+        # Softmax
+
 
     def train(self, X, y, num_epochs, learning_rate, batch_size):
         for epoch in range(num_epochs):
@@ -271,17 +282,21 @@ class CNN:
                 
                 target = y[i]
 
-                for layer in self.layers:
-                    if i == 3 or input.max() > 1000:
-                        1
+                for layer in self.layers[:-1]:
                     input = layer.forward(input)  # input 이지만 output임 (...)
+                    if  np.isnan(input).any():
+                        print('NaN detected !!!')
+                output = self.layers[-1].forward(input)
+                
+                if  np.isnan(output).any():
+                    print('NaN detected !!!')
 
                 # MSE
-                loss += np.sum((input - target) ** 2) / input.shape[0]
+                loss += np.sum((target - output) ** 2) / output.shape[0]
 
                 # backpropagation
-                grad_output = 2 * (input - target)  # derivative of MSE
-
+                grad_output = -2 * (target - output)  # derivative of MSE
+                
                 for layer in reversed(self.layers):
                     grad_output = layer.backward(grad_output, learning_rate)
 
@@ -307,6 +322,7 @@ if __name__ == "__main__":
     # bs1로 200개 샘플 학습 : loss는 줄어드나 test acc는 10%
     # bs1로 2000개 샘플 학습 : loss는 줄어드나 test acc는 17%
     # bs1로 20000개 샘플 학습 : loss는 줄어들다 조금 오르다 test acc는 93%
+    # random norm weight initialization 하니까 test acc 19%
 
     epochs = 10
     lr = 0.01

@@ -12,10 +12,16 @@ class CNN(nn.Module):
         self.conv1 = nn.Conv2d(1, 8, 3, 1, 0)
         # in_channel, out_channel, filter_size, stride, padding
         
+        # nn.init.normal_(self.conv1.weight)
+        # normal initialization do not work well
+        
         # self.conv2
         # self.dropout
         self.fc1 = nn.Linear(1352, 10)
-
+        
+        # nn.init.normal_(self.fc1.weight)
+        # normal initialization do not work well
+        
     def forward(self, x):
         x = self.conv1(x)
         # print(x.max()) # note: max value of output is very slowly increases.
@@ -43,7 +49,7 @@ if __name__ == "__main__":
     bs = 1 
     epoch_num = 10
     lr = 0.01
-    count_threshold = 20000
+    count_threshold = 2000
 
 
     # load dataset
