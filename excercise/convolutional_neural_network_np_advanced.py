@@ -83,13 +83,16 @@ class ConvLayer:
             for i in range(output_height):
                 for j in range(output_width):
                     for f in range(self.num_out_filters):
+                        #FIXME: 마지막 filter dimension을 : 말고 ff로 처리하고 for loop 안에 넣기 ? 
                         receptive_field = padded_inputs[
                                                         b, 
                                                         i * self.stride : i * self.stride + self.filter_size, 
                                                         j * self.stride : j * self.stride + self.filter_size, 
                                                         :
                                                        ]
-                        val = (self.filters[f, ...] * receptive_field.squeeze()).sum()
+                        val = 0
+                        for ff in range(self.num_in_filters):
+                            val = (self.filters[f, ...] * receptive_field[..., ff]).sum()
                         self.outputs[b, i, j, f] = val
                         # if abs(val) > 1:
                         #     print(f'conv output : {val}')
@@ -119,20 +122,21 @@ class ConvLayer:
             for i in range(self.outputs.shape[1]):  # h
                 for j in range(self.outputs.shape[2]):  # w
                     for f in range(self.num_out_filters):  # c
-                        receptive_field = padded_inputs[  # 100, 28, 28, 1
-                                                        b, 
-                                                        j * self.stride : j * self.stride + self.filter_size, 
-                                                        i * self.stride : i * self.stride + self.filter_size, 
-                                                        :
-                                                       ]
-                        
-                        grad_filters[f, ...] += (receptive_field * grad_input[b, i, j, f]).squeeze()  # 100, 26, 26, 8
-                        padded_grad_inputs[
-                                           b, 
-                                           i * self.stride : i * self.stride + self.filter_size, 
-                                           j * self.stride : j * self.stride + self.filter_size, 
-                                           :
-                                          ] += np.expand_dims(self.filters[f, ...] * grad_input[b, i, j, f], axis=2)
+                        for ff in range(self.num_in_filters):
+                            receptive_field = padded_inputs[  # 100, 28, 28, 1
+                                                            b, 
+                                                            j * self.stride : j * self.stride + self.filter_size, 
+                                                            i * self.stride : i * self.stride + self.filter_size, 
+                                                            ff
+                                                        ]
+                            
+                            grad_filters[f, ...] += (receptive_field[..., ff] * grad_input[b, i, j, f]).squeeze()  # 100, 26, 26, 8
+                            padded_grad_inputs[
+                                            b, 
+                                            i * self.stride : i * self.stride + self.filter_size, 
+                                            j * self.stride : j * self.stride + self.filter_size, 
+                                            ff
+                                            ] += np.expand_dims(self.filters[f, ...] * grad_input[b, i, j, f], axis=2)
         
         self.filters -= learning_rate * grad_filters  # weight update.
         grad_output = padded_grad_inputs[
@@ -320,7 +324,6 @@ if __name__ == "__main__":
     small_dataset_size = bs * n_iter  
     # pytorch : bs1로 200개 샘플 학습 : loss는 줄어드나 test acc는 10%
     # pytorch : bs1로 2000개 샘플 학습 : loss는 줄어드나 test acc는 17%
-    # numpy : bs1로 2000개 샘플 학습 : loss는 약간감소 test acc는 24.9%
     # pytorch : bs1로 20000개 샘플 학습 : loss는 줄어들다 조금 오르다 test acc는 93%
     # pytorch : random norm weight initialization 하니까 test acc 19%
 
@@ -360,9 +363,12 @@ if __name__ == "__main__":
     # TODO: ConvLayer 여러개 쌓아서 학습 잘 되는지 확인, pytorch code 성능과 비교
     cnn.add(ConvLayer(1, 8, 3, 1, 0))  # num_in_filters, num_out_filters, filter_size, stride, padding
     cnn.add(ReLU())
+    cnn.add(ConvLayer(8, 16, 3, 1, 0))
+    cnn.add(ReLU())
     cnn.add(MaxPoolLayer(2, 2))
     cnn.add(FlattenLayer())
-    cnn.add(DenseLayer(1352, 10))
+    cnn.add(DenseLayer(2304, 10))
+    # cnn.add(DenseLayer(1352, 10))
     cnn.add(SoftmaxLayer())
 
     cnn.train(X_train, y_train, num_epochs=epochs, learning_rate=lr, batch_size=bs)

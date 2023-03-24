@@ -1,5 +1,9 @@
 import numpy as np
 
+""" how mlp solves xor non-linear relation
+https://ju-blog.tistory.com/58
+"""
+
 # sample data
 x = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
 y = np.array([0, 1, 1, 0])
